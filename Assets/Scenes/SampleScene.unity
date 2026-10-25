@@ -1115,8 +1115,8 @@ MonoBehaviour:
     m_Bits: 8
   wallRunSpeed: 10
   wallRunForceMultiplier: 10
-  wallJumpUpForce: 9
-  wallJumpOutForce: 21.14
+  wallJumpUpForce: 6
+  wallJumpOutForce: 3
   wallCheckDistance: 0.8
   minJumpHeight: 1.5
   camTilt: 15
