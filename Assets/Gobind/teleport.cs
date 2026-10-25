@@ -8,8 +8,18 @@ public class Teleporter : MonoBehaviour
     // Static flag to prevent instant re-trigger loops between pairs
     private static bool isTeleporting = false;
 
+    void Start()
+    {
+        isTeleporting = false;
+        Debug.Log(name + " trigger bounds: " + GetComponent<Collider>().bounds);
+    }
+
     void OnTriggerEnter(Collider other)
     {
+        Debug.Log("Hit: " + other.name +
+              " | isTeleporting=" + isTeleporting +
+              " | dest=" + (destinationPad != null ? destinationPad.name : "NONE"));
+
         if (isTeleporting) return;
 
         // Check if the object entering the pad is the Player
@@ -24,26 +34,18 @@ public class Teleporter : MonoBehaviour
         isTeleporting = true;
 
         Rigidbody rb = player.GetComponent<Rigidbody>();
+        Vector3 targetPosition = destinationPad.position + Vector3.up * 1.2f;
 
-        // Clear physics velocity so momentum doesn't fling the player into a wall upon arrival
+        Debug.Log("Teleporting from " + player.transform.position + " to " + targetPosition);
+
         if (rb != null)
         {
             rb.linearVelocity = Vector3.zero;
+            rb.position = targetPosition;
         }
+        player.transform.position = targetPosition;
+        Physics.SyncTransforms();
 
-        // Move player to the destination pad's position (plus a slight upward offset so they don't clip into the floor)
-        Vector3 targetPosition = destinationPad.position + Vector3.up * 0.5f;
-
-        if (rb != null)
-        {
-            rb.MovePosition(targetPosition);
-        }
-        else
-        {
-            player.transform.position = targetPosition;
-        }
-
-        // Wait a brief moment to let the player exit the trigger zone before resetting the lock
         yield return new WaitForSeconds(0.4f);
         isTeleporting = false;
     }
