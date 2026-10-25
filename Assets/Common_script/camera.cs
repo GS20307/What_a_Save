@@ -8,28 +8,31 @@ public class camera : MonoBehaviour
     private Camera cam;
     private float xRotation = 0f;
 
+    [HideInInspector]
+    public float currentTilt = 0f; // Will be controlled by the WallRun script
+
     void Start()
     {
-        // Find the camera attached to this player
         cam = GetComponentInChildren<Camera>();
         
-        // Lock the mouse to the center of the screen and hide it
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
 
     void Update()
     {
-        // Get mouse movement inputs
         float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
         float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
 
-        // Calculate up/down rotation (pitch) and clamp it
         xRotation -= mouseY;
         xRotation = Mathf.Clamp(xRotation, -80f, 80f);
 
-        // Apply rotation to the camera (up/down) and the player body (left/right)
-        cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+        // Apply rotation, including the dynamic tilt (Z-axis) from wall running
+        if (cam != null)
+        {
+            cam.transform.localRotation = Quaternion.Euler(xRotation, 0f, currentTilt);
+        }
+        
         transform.Rotate(Vector3.up * mouseX);
     }
 }
