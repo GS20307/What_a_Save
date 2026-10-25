@@ -51,6 +51,7 @@
   <ItemGroup>
     <Compile Include="Assets\Common_script\basic_movement.cs" />
     <Compile Include="Assets\Gobind\wallrun.cs" />
+    <Compile Include="Assets\NJS\PlayerSlide.cs" />
     <Compile Include="Assets\TutorialInfo\Scripts\Readme.cs" />
     <Compile Include="Assets\Gobind\wall_jump.cs" />
     <Compile Include="Assets\Common_script\camera.cs" />
