@@ -1,24 +1,27 @@
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
-public class wallrun : MonoBehaviour
+public class WallRun : MonoBehaviour
 {
     [Header("References")]
     private Rigidbody rb;
     private camera camScript;
 
-    [Header("Wall Running")]
+    [Header("Layer Masks")]
     public LayerMask whatIsWall;
     public LayerMask whatIsGround;
-    public float wallRunSpeed = 7f;          // Lowered default speed
-    public float wallRunForceMultiplier = 10f; // Lowered default force
-    public float wallJumpForce = 7f;
-    public float wallCheckDistance = 0.8f;
-    public float minJumpHeight = 1.5f;
 
-    [Header("Camera Tilt")]
-    public float camTilt = 15f;      
-    public float tiltSpeed = 10f;    
+    [Header("Wall Running & Launch Settings")]
+    public float wallRunSpeed = 12f;
+    public float wallRunForceMultiplier = 10f;
+    public float wallJumpUpForce = 9f;     // Vertical launch power
+    public float wallJumpOutForce = 12f;   // How hard it kicks you away from the wall
+    public float wallCheckDistance = 0.9f;
+    public float minJumpHeight = 1.0f;
+
+    [Header("Camera Tilt Settings")]
+    public float camTilt = 15f;
+    public float tiltSpeed = 15f;
     private float currentTilt = 0f;
 
     private bool wallLeft;
@@ -26,6 +29,9 @@ public class wallrun : MonoBehaviour
     private RaycastHit leftWallHit;
     private RaycastHit rightWallHit;
     public bool isWallRunning;
+
+    // Counts down after a wall jump; basic_movement reads this to skip its speed clamp
+    public float wallJumpTimer;
 
     void Start()
     {
@@ -35,6 +41,8 @@ public class wallrun : MonoBehaviour
 
     void Update()
     {
+        if (wallJumpTimer > 0f) wallJumpTimer -= Time.deltaTime;
+
         CheckForWall();
         StateMachine();
         HandleCameraTilt();
@@ -51,7 +59,7 @@ public class wallrun : MonoBehaviour
     void CheckForWall()
     {
         wallRight = Physics.Raycast(transform.position, transform.right, out rightWallHit, wallCheckDistance, whatIsWall);
-        wallLeft = Physics.Raycast(transform.position, -transform.right, out leftWallHit, whatIsWall);
+        wallLeft = Physics.Raycast(transform.position, -transform.right, out leftWallHit, wallCheckDistance, whatIsWall);
     }
 
     bool AboveGround()
@@ -63,7 +71,8 @@ public class wallrun : MonoBehaviour
     {
         float verticalInput = Input.GetAxisRaw("Vertical");
 
-        if ((wallLeft || wallRight) && verticalInput > 0 && AboveGround())
+        // Start Wall Run: Touching wall + holding W + airborne (and not just wall-jumped)
+        if ((wallLeft || wallRight) && verticalInput > 0f && AboveGround() && wallJumpTimer <= 0f)
         {
             if (!isWallRunning)
                 StartWallRun();
@@ -77,29 +86,40 @@ public class wallrun : MonoBehaviour
         {
             if (isWallRunning)
                 StopWallRun();
+
+            // Allow launching off the wall even if W isn't held, as long as airborne
+            else if ((wallLeft || wallRight) && AboveGround() && wallJumpTimer <= 0f && Input.GetKeyDown(KeyCode.Space))
+            {
+                WallJump();
+            }
         }
     }
 
     void StartWallRun()
     {
         isWallRunning = true;
-        rb.useGravity = false; 
+        rb.useGravity = false;
+        rb.linearVelocity = new Vector3(rb.linearVelocity.x, Mathf.Max(rb.linearVelocity.y, 0f), rb.linearVelocity.z);
     }
 
     void WallRunningMovement()
     {
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
 
-        Vector3 wallNormal = wallRight ? rightWallHit.normal : leftWallHit.normal;
+        bool isRightWallActive = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
+        Vector3 wallNormal = isRightWallActive ? rightWallHit.normal : leftWallHit.normal;
+
         Vector3 wallForward = Vector3.Cross(wallNormal, transform.up);
 
         if ((transform.forward - wallForward).magnitude > (transform.forward - -wallForward).magnitude)
+        {
             wallForward = -wallForward;
+        }
 
         // Apply movement force
         rb.AddForce(wallForward * wallRunSpeed * wallRunForceMultiplier, ForceMode.Force);
 
-        // STRICT SPEED CAP: Keeps you from accelerating infinitely into a rocket ship
+        // Strict speed cap
         Vector3 flatVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
         if (flatVel.magnitude > wallRunSpeed)
         {
@@ -109,24 +129,33 @@ public class wallrun : MonoBehaviour
 
         // Keep player pressed slightly against the wall
         if (!(wallLeft && Input.GetKey(KeyCode.A)) && !(wallRight && Input.GetKey(KeyCode.D)))
-            rb.AddForce(-wallNormal * 100f, ForceMode.Force);
+        {
+            rb.AddForce(-wallNormal * 50f, ForceMode.Force);
+        }
     }
 
     void WallJump()
     {
-        Vector3 wallNormal = wallRight ? rightWallHit.normal : leftWallHit.normal;
-        Vector3 jumpDirection = transform.up + wallNormal * 1.5f;
+        // Determine which wall we are launching off of
+        bool isRightWallActive = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
+        Vector3 wallNormal = isRightWallActive ? rightWallHit.normal : leftWallHit.normal;
 
+        // Clear velocity for a clean, snappy launch
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
-        rb.AddForce(jumpDirection * wallJumpForce, ForceMode.Impulse);
 
+        // Launch up and away from the wall
+        Vector3 jumpDirection = (transform.up * wallJumpUpForce) + (wallNormal * wallJumpOutForce);
+        rb.AddForce(jumpDirection, ForceMode.Impulse);
+
+        wallJumpTimer = 0.3f;
         StopWallRun();
     }
 
     void StopWallRun()
     {
+        if (!isWallRunning) return;
         isWallRunning = false;
-        rb.useGravity = true; 
+        rb.useGravity = true;
     }
 
     void HandleCameraTilt()
@@ -135,8 +164,17 @@ public class wallrun : MonoBehaviour
 
         if (isWallRunning)
         {
-            if (wallRight) targetTilt = camTilt;     
-            if (wallLeft) targetTilt = -camTilt;    
+            bool isRightWallActive = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
+            bool isLeftWallActive = wallLeft && (!wallRight || leftWallHit.distance < rightWallHit.distance);
+
+            if (isRightWallActive)
+            {
+                targetTilt = camTilt;  // Wall on the RIGHT -> Tilt RIGHT
+            }
+            else if (isLeftWallActive)
+            {
+                targetTilt = -camTilt; // Wall on the LEFT -> Tilt LEFT
+            }
         }
 
         currentTilt = Mathf.Lerp(currentTilt, targetTilt, tiltSpeed * Time.deltaTime);

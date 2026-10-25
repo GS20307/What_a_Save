@@ -11,32 +11,30 @@ public class basic_movement : MonoBehaviour
     public float groundDrag = 6f;
 
     [Header("Jump Settings")]
-    public float jumpCooldown = 0.4f; // Time required standing on the ground before next jump
-    private float landTimer;
-    private bool hasLeftGround = true; // Tracks if player successfully left the ground after a jump
-    private float lastGroundContactTime = -1f; 
-    [Header("Ground Check")]
-    public Transform groundCheck;
-    public float groundDistance = 0.2f;
+    public float jumpCooldown = 0.05f;
     public LayerMask groundMask;
 
+    // Private state (all declared here, at class level)
     private Rigidbody rb;
-    private wallrun wallRunScript; 
+    private WallRun wallRunScript;
     private bool isGrounded;
     private bool isTouchingWall;
     private Vector3 wallNormal;
+    private float landTimer;
+    private bool hasLeftGround = true;
+    private float lastGroundContactTime = -1f;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
-        rb.freezeRotation = true; 
-        wallRunScript = GetComponent<wallrun>(); 
-        landTimer = jumpCooldown; // Allow immediate first jump when starting game
+        rb.freezeRotation = true;
+        rb.sleepThreshold = 0f;
+        wallRunScript = GetComponent<WallRun>();
+        landTimer = jumpCooldown;
     }
 
     void Update()
     {
-        // Check if the player's feet are touching the Ground layer
         isGrounded = Time.time - lastGroundContactTime < 0.1f;
 
         if (!isGrounded)
@@ -48,7 +46,7 @@ public class basic_movement : MonoBehaviour
         {
             landTimer += Time.deltaTime;
         }
-        // Handle drag so movement feels snappy (disabled while wall running)
+
         if (wallRunScript != null && wallRunScript.isWallRunning)
         {
             rb.linearDamping = 0f;
@@ -62,7 +60,6 @@ public class basic_movement : MonoBehaviour
             rb.linearDamping = 0f;
         }
 
-        // Jump input: Requires GetKeyDown, cooldown met, grounded, has left ground, and no wall running
         if (Input.GetKeyDown(KeyCode.Space) && landTimer >= jumpCooldown && isGrounded && hasLeftGround && (wallRunScript == null || !wallRunScript.isWallRunning))
         {
             Jump();
@@ -71,15 +68,19 @@ public class basic_movement : MonoBehaviour
 
     void FixedUpdate()
     {
-        // IF WALL RUNNING, STOP NORMAL MOVEMENT ENTIRELY
         if (wallRunScript != null && wallRunScript.isWallRunning)
         {
-            return; 
+            return;
         }
 
         MovePlayer();
-        SpeedControl();
-        isTouchingWall = false; 
+
+        if (wallRunScript == null || wallRunScript.wallJumpTimer <= 0f)
+        {
+            SpeedControl();
+        }
+
+        isTouchingWall = false;
     }
 
     void MovePlayer()
@@ -98,14 +99,8 @@ public class basic_movement : MonoBehaviour
             }
         }
 
-        if (isGrounded)
-        {
-            rb.AddForce(moveDir * moveSpeed * movementMultiplier, ForceMode.Force);
-        }
-        else
-        {
-            rb.AddForce(moveDir * moveSpeed * movementMultiplier * 0.4f, ForceMode.Force);
-        }
+        float airMultiplier = isGrounded ? 1f : 0.4f;
+        rb.AddForce(moveDir * moveSpeed * movementMultiplier * airMultiplier, ForceMode.Force);
     }
 
     void SpeedControl()
@@ -130,6 +125,7 @@ public class basic_movement : MonoBehaviour
                 break;
             }
         }
+
         foreach (ContactPoint contact in collision.contacts)
         {
             if (contact.normal.y > -0.3f && contact.normal.y < 0.3f)
@@ -143,8 +139,8 @@ public class basic_movement : MonoBehaviour
 
     void Jump()
     {
-        landTimer = 0f; 
-        hasLeftGround = false; // Reset lift-off flag until we actually leave the floor
+        landTimer = 0f;
+        hasLeftGround = false;
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
         rb.AddForce(transform.up * jumpForce, ForceMode.Impulse);
     }
