@@ -67,5 +67,5 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "Game Jam.slnx"
+    "dotnet.defaultSolution": "What_a_Save.slnx"
 }
