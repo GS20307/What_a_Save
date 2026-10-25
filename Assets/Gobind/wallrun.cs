@@ -13,21 +13,25 @@ public class WallRun : MonoBehaviour
 
     [Header("Wall Running & Launch Settings")]
     public float wallRunSpeed = 12f;
-    public float wallJumpUpForce = 9f;     // Vertical launch power
-    public float wallJumpOutForce = 12f;   // How hard it kicks you toward the opposite wall
+    public float wallRunForceMultiplier = 10f;
+    public float wallJumpUpForce = 6f;     // Vertical launch power
+    public float wallJumpOutForce = 6f;    // How hard it kicks you away from the wall
     public float wallCheckDistance = 0.9f;
     public float minJumpHeight = 1.0f;
 
     [Header("Camera Tilt Settings")]
-    public float camTilt = 15f;      
-    public float tiltSpeed = 15f;    
+    public float camTilt = 15f;
+    public float tiltSpeed = 15f;
     private float currentTilt = 0f;
 
     private bool wallLeft;
     private bool wallRight;
     private RaycastHit leftWallHit;
     private RaycastHit rightWallHit;
-    private bool isWallRunning;
+    public bool isWallRunning;
+
+    // Counts down after a wall jump; basic_movement reads this to skip its speed clamp
+    public float wallJumpTimer;
 
     void Start()
     {
@@ -37,6 +41,8 @@ public class WallRun : MonoBehaviour
 
     void Update()
     {
+        if (wallJumpTimer > 0f) wallJumpTimer -= Time.deltaTime;
+
         CheckForWall();
         StateMachine();
         HandleCameraTilt();
@@ -53,7 +59,7 @@ public class WallRun : MonoBehaviour
     void CheckForWall()
     {
         wallRight = Physics.Raycast(transform.position, transform.right, out rightWallHit, wallCheckDistance, whatIsWall);
-        wallLeft = Physics.Raycast(transform.position, -transform.right, out leftWallHit, whatIsWall);
+        wallLeft = Physics.Raycast(transform.position, -transform.right, out leftWallHit, wallCheckDistance, whatIsWall);
     }
 
     bool AboveGround()
@@ -65,8 +71,7 @@ public class WallRun : MonoBehaviour
     {
         float verticalInput = Input.GetAxisRaw("Vertical");
 
-        // Start Wall Run: Touching wall + holding W + airborne
-        if ((wallLeft || wallRight) && verticalInput > 0f && AboveGround())
+        if ((wallLeft || wallRight) && verticalInput > 0f && AboveGround() && wallJumpTimer <= 0f)
         {
             if (!isWallRunning)
                 StartWallRun();
@@ -80,9 +85,8 @@ public class WallRun : MonoBehaviour
         {
             if (isWallRunning)
                 StopWallRun();
-            
-            // Allow launching/jumping off the wall even if W isn't held, as long as airborne
-            else if ((wallLeft || wallRight) && AboveGround() && Input.GetKeyDown(KeyCode.Space))
+
+            else if ((wallLeft || wallRight) && AboveGround() && wallJumpTimer <= 0f && Input.GetKeyDown(KeyCode.Space))
             {
                 WallJump();
             }
@@ -92,7 +96,7 @@ public class WallRun : MonoBehaviour
     void StartWallRun()
     {
         isWallRunning = true;
-        rb.useGravity = false; 
+        rb.useGravity = false;
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, Mathf.Max(rb.linearVelocity.y, 0f), rb.linearVelocity.z);
     }
 
@@ -102,7 +106,7 @@ public class WallRun : MonoBehaviour
 
         bool isRightWallActive = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
         Vector3 wallNormal = isRightWallActive ? rightWallHit.normal : leftWallHit.normal;
-        
+
         Vector3 wallForward = Vector3.Cross(wallNormal, transform.up);
 
         if ((transform.forward - wallForward).magnitude > (transform.forward - -wallForward).magnitude)
@@ -110,7 +114,14 @@ public class WallRun : MonoBehaviour
             wallForward = -wallForward;
         }
 
-        rb.AddForce(wallForward * wallRunSpeed, ForceMode.Force);
+        rb.AddForce(wallForward * wallRunSpeed * wallRunForceMultiplier, ForceMode.Force);
+
+        Vector3 flatVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+        if (flatVel.magnitude > wallRunSpeed)
+        {
+            Vector3 limitedVel = flatVel.normalized * wallRunSpeed;
+            rb.linearVelocity = new Vector3(limitedVel.x, rb.linearVelocity.y, limitedVel.z);
+        }
 
         if (!(wallLeft && Input.GetKey(KeyCode.A)) && !(wallRight && Input.GetKey(KeyCode.D)))
         {
@@ -120,17 +131,13 @@ public class WallRun : MonoBehaviour
 
     void WallJump()
     {
-        // Determine which wall we are launching off of
         bool isRightWallActive = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
         Vector3 wallNormal = isRightWallActive ? rightWallHit.normal : leftWallHit.normal;
 
-        // Clear velocity for a clean, snappy launch
-        rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+        // Replace velocity entirely: same launch every time, ignores mass and previous speed
+        rb.linearVelocity = (Vector3.up * wallJumpUpForce) + (wallNormal * wallJumpOutForce);
 
-        // Launch up and away toward the opposite wall
-        Vector3 jumpDirection = (transform.up * wallJumpUpForce) + (wallNormal * wallJumpOutForce);
-        rb.AddForce(jumpDirection, ForceMode.Impulse);
-
+        wallJumpTimer = 0.15f;
         StopWallRun();
     }
 
@@ -138,7 +145,7 @@ public class WallRun : MonoBehaviour
     {
         if (!isWallRunning) return;
         isWallRunning = false;
-        rb.useGravity = true; 
+        rb.useGravity = true;
     }
 
     void HandleCameraTilt()
@@ -150,14 +157,13 @@ public class WallRun : MonoBehaviour
             bool isRightWallActive = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
             bool isLeftWallActive = wallLeft && (!wallRight || leftWallHit.distance < rightWallHit.distance);
 
-            // Correct tilt rules matching your preference
-            if (isRightWallActive) 
+            if (isRightWallActive)
             {
-                targetTilt = camTilt;  // Wall on the RIGHT -> Tilt RIGHT
+                targetTilt = camTilt;
             }
-            else if (isLeftWallActive) 
+            else if (isLeftWallActive)
             {
-                targetTilt = -camTilt; // Wall on the LEFT -> Tilt LEFT
+                targetTilt = -camTilt;
             }
         }
 
