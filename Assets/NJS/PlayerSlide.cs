@@ -27,6 +27,7 @@ public class PlayerSlide : MonoBehaviour
 
     [Header("Movement Compatibility")]
     public basic_movement movementScript;
+    public AbilityCooldown slideCooldownBar;
 
     private Rigidbody rb;
     private CapsuleCollider capsule;
@@ -139,6 +140,12 @@ public class PlayerSlide : MonoBehaviour
         horizontalVelocity.y = 0f;
 
         if (horizontalVelocity.magnitude < minSpeedToSlide)
+            return;
+
+        if (horizontalVelocity.magnitude < minSpeedToSlide)
+            return;
+
+        if (slideCooldownBar != null && !slideCooldownBar.TryStart())
             return;
 
         slideDirection = horizontalVelocity.normalized;

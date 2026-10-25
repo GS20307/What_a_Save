@@ -16,18 +16,21 @@ public class PlayerDash : MonoBehaviour
     private Rigidbody rb;
     private bool isDashing;
     private bool canDash = true;
+    public float dashStaminaCost = 30f;
+    private PlayerStamina stamina;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
+        stamina = GetComponent<PlayerStamina>();
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.LeftShift)
-            && canDash && !isDashing)
+        if (Input.GetKeyDown(KeyCode.LeftShift) && canDash && !isDashing)
         {
-            StartCoroutine(PerformDash());
+            if (stamina == null || stamina.TryUse(dashStaminaCost))
+                StartCoroutine(PerformDash());
         }
     }
 
