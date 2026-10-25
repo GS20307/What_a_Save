@@ -14,8 +14,8 @@ public class WallRun : MonoBehaviour
     [Header("Wall Running & Launch Settings")]
     public float wallRunSpeed = 12f;
     public float wallRunForceMultiplier = 10f;
-    public float wallJumpUpForce = 9f;     // Vertical launch power
-    public float wallJumpOutForce = 12f;   // How hard it kicks you away from the wall
+    public float wallJumpUpForce = 6f;     // Vertical launch power
+    public float wallJumpOutForce = 6f;    // How hard it kicks you away from the wall
     public float wallCheckDistance = 0.9f;
     public float minJumpHeight = 1.0f;
 
@@ -71,7 +71,6 @@ public class WallRun : MonoBehaviour
     {
         float verticalInput = Input.GetAxisRaw("Vertical");
 
-        // Start Wall Run: Touching wall + holding W + airborne (and not just wall-jumped)
         if ((wallLeft || wallRight) && verticalInput > 0f && AboveGround() && wallJumpTimer <= 0f)
         {
             if (!isWallRunning)
@@ -87,7 +86,6 @@ public class WallRun : MonoBehaviour
             if (isWallRunning)
                 StopWallRun();
 
-            // Allow launching off the wall even if W isn't held, as long as airborne
             else if ((wallLeft || wallRight) && AboveGround() && wallJumpTimer <= 0f && Input.GetKeyDown(KeyCode.Space))
             {
                 WallJump();
@@ -116,10 +114,8 @@ public class WallRun : MonoBehaviour
             wallForward = -wallForward;
         }
 
-        // Apply movement force
         rb.AddForce(wallForward * wallRunSpeed * wallRunForceMultiplier, ForceMode.Force);
 
-        // Strict speed cap
         Vector3 flatVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
         if (flatVel.magnitude > wallRunSpeed)
         {
@@ -127,7 +123,6 @@ public class WallRun : MonoBehaviour
             rb.linearVelocity = new Vector3(limitedVel.x, rb.linearVelocity.y, limitedVel.z);
         }
 
-        // Keep player pressed slightly against the wall
         if (!(wallLeft && Input.GetKey(KeyCode.A)) && !(wallRight && Input.GetKey(KeyCode.D)))
         {
             rb.AddForce(-wallNormal * 50f, ForceMode.Force);
@@ -136,18 +131,13 @@ public class WallRun : MonoBehaviour
 
     void WallJump()
     {
-        // Determine which wall we are launching off of
         bool isRightWallActive = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
         Vector3 wallNormal = isRightWallActive ? rightWallHit.normal : leftWallHit.normal;
 
-        // Clear velocity for a clean, snappy launch
-        rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+        // Replace velocity entirely: same launch every time, ignores mass and previous speed
+        rb.linearVelocity = (Vector3.up * wallJumpUpForce) + (wallNormal * wallJumpOutForce);
 
-        // Launch up and away from the wall
-        Vector3 jumpDirection = (transform.up * wallJumpUpForce) + (wallNormal * wallJumpOutForce);
-        rb.AddForce(jumpDirection, ForceMode.Impulse);
-
-        wallJumpTimer = 0.3f;
+        wallJumpTimer = 0.15f;
         StopWallRun();
     }
 
@@ -169,11 +159,11 @@ public class WallRun : MonoBehaviour
 
             if (isRightWallActive)
             {
-                targetTilt = camTilt;  // Wall on the RIGHT -> Tilt RIGHT
+                targetTilt = camTilt;
             }
             else if (isLeftWallActive)
             {
-                targetTilt = -camTilt; // Wall on the LEFT -> Tilt LEFT
+                targetTilt = -camTilt;
             }
         }
 
