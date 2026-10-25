@@ -6,28 +6,42 @@ public class WallDash : MonoBehaviour
     [Header("References")]
     private Rigidbody rb;
 
-    [Header("Wall Jump / Dash Settings")]
+    [Header("Layer Masks")]
     public LayerMask whatIsWall;
+    public LayerMask whatIsGround;
+
+    [Header("Wall Jump / Dash Settings")]
     public float wallCheckDistance = 0.8f;
-    public float wallJumpUpForce = 8f;     // Vertical launch power
-    public float wallJumpOutForce = 12f;   // How hard it kicks you away from the wall
+    public float wallJumpUpForce = 5f;     // Vertical launch power
+    public float wallJumpOutForce = 6f;    // How hard it kicks you away from the wall
+    public float minJumpHeight = 1.0f;     // Must be this high above the ground to wall jump
+    public float dashCooldown = 0.3f;      // Prevents spamming / double triggers
 
     private bool wallLeft;
     private bool wallRight;
     private RaycastHit leftWallHit;
     private RaycastHit rightWallHit;
+    private float nextDashTime;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
+
+        // WallRun already has a wall jump. If both run, one Space press launches twice.
+        if (GetComponent<WallRun>() != null)
+        {
+            enabled = false;
+        }
     }
 
     void Update()
     {
         CheckForWalls();
 
-        // Press Space while touching a wall to dash/jump off it to the opposite side
-        if (Input.GetKeyDown(KeyCode.Space) && (wallLeft || wallRight))
+        if (Input.GetKeyDown(KeyCode.Space)
+            && (wallLeft || wallRight)
+            && AboveGround()
+            && Time.time >= nextDashTime)
         {
             ExecuteWallJump();
         }
@@ -35,23 +49,26 @@ public class WallDash : MonoBehaviour
 
     void CheckForWalls()
     {
-        // Cast rays left and right to detect nearby walls
         wallRight = Physics.Raycast(transform.position, transform.right, out rightWallHit, wallCheckDistance, whatIsWall);
-        wallLeft = Physics.Raycast(transform.position, -transform.right, out leftWallHit, whatIsWall);
+        wallLeft = Physics.Raycast(transform.position, -transform.right, out leftWallHit, wallCheckDistance, whatIsWall);
+    }
+
+    bool AboveGround()
+    {
+        return !Physics.Raycast(transform.position, Vector3.down, minJumpHeight, whatIsGround);
     }
 
     void ExecuteWallJump()
     {
-        // Figure out which wall we are currently touching
-        Vector3 wallNormal = wallRight ? rightWallHit.normal : leftWallHit.normal;
+        // Use the closer wall if both sides are touching
+        bool useRight = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
+        Vector3 wallNormal = useRight ? rightWallHit.normal : leftWallHit.normal;
 
-        // Clear existing vertical velocity so every wall jump feels crisp and identical
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
 
-        // Calculate bounce direction: straight up + pushed away from the wall surface
         Vector3 jumpDirection = (transform.up * wallJumpUpForce) + (wallNormal * wallJumpOutForce);
-
-        // Apply instant impulse force to fling the player toward the opposite wall
         rb.AddForce(jumpDirection, ForceMode.Impulse);
+
+        nextDashTime = Time.time + dashCooldown;
     }
 }
