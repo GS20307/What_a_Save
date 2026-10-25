@@ -5,12 +5,13 @@ public class wallrun : MonoBehaviour
 {
     [Header("References")]
     private Rigidbody rb;
-    private camera camScript; // References your custom camera script
+    private camera camScript;
 
     [Header("Wall Running")]
     public LayerMask whatIsWall;
     public LayerMask whatIsGround;
-    public float wallRunSpeed = 10f;
+    public float wallRunSpeed = 7f;          // Lowered default speed
+    public float wallRunForceMultiplier = 10f; // Lowered default force
     public float wallJumpForce = 7f;
     public float wallCheckDistance = 0.8f;
     public float minJumpHeight = 1.5f;
@@ -24,7 +25,7 @@ public class wallrun : MonoBehaviour
     private bool wallRight;
     private RaycastHit leftWallHit;
     private RaycastHit rightWallHit;
-    private bool isWallRunning;
+    public bool isWallRunning;
 
     void Start()
     {
@@ -95,8 +96,18 @@ public class wallrun : MonoBehaviour
         if ((transform.forward - wallForward).magnitude > (transform.forward - -wallForward).magnitude)
             wallForward = -wallForward;
 
-        rb.AddForce(wallForward * wallRunSpeed, ForceMode.Force);
+        // Apply movement force
+        rb.AddForce(wallForward * wallRunSpeed * wallRunForceMultiplier, ForceMode.Force);
 
+        // STRICT SPEED CAP: Keeps you from accelerating infinitely into a rocket ship
+        Vector3 flatVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+        if (flatVel.magnitude > wallRunSpeed)
+        {
+            Vector3 limitedVel = flatVel.normalized * wallRunSpeed;
+            rb.linearVelocity = new Vector3(limitedVel.x, rb.linearVelocity.y, limitedVel.z);
+        }
+
+        // Keep player pressed slightly against the wall
         if (!(wallLeft && Input.GetKey(KeyCode.A)) && !(wallRight && Input.GetKey(KeyCode.D)))
             rb.AddForce(-wallNormal * 100f, ForceMode.Force);
     }
@@ -130,7 +141,6 @@ public class wallrun : MonoBehaviour
 
         currentTilt = Mathf.Lerp(currentTilt, targetTilt, tiltSpeed * Time.deltaTime);
 
-        // Send the smooth tilt value directly to the camera script
         if (camScript != null)
         {
             camScript.currentTilt = currentTilt;

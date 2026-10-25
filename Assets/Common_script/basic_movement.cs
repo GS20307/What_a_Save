@@ -10,12 +10,18 @@ public class basic_movement : MonoBehaviour
     public float movementMultiplier = 10f;
     public float groundDrag = 6f;
 
+    [Header("Jump Settings")]
+    public float jumpCooldown = 0.4f; // Time required standing on the ground before next jump
+    private float landTimer;
+    private bool hasLeftGround = true; // Tracks if player successfully left the ground after a jump
+    private float lastGroundContactTime = -1f; 
     [Header("Ground Check")]
     public Transform groundCheck;
     public float groundDistance = 0.2f;
     public LayerMask groundMask;
 
     private Rigidbody rb;
+    private wallrun wallRunScript; 
     private bool isGrounded;
     private bool isTouchingWall;
     private Vector3 wallNormal;
@@ -23,22 +29,41 @@ public class basic_movement : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody>();
-        rb.freezeRotation = true; // Prevents the player capsule from tipping over
+        rb.freezeRotation = true; 
+        wallRunScript = GetComponent<wallrun>(); 
+        landTimer = jumpCooldown; // Allow immediate first jump when starting game
     }
 
     void Update()
     {
         // Check if the player's feet are touching the Ground layer
-        isGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
+        isGrounded = Time.time - lastGroundContactTime < 0.1f;
 
-        // Handle drag so movement feels snappy
-        if (isGrounded)
-            rb.linearDamping = groundDrag;
-        else
+        if (!isGrounded)
+        {
+            hasLeftGround = true;
+            landTimer = 0f;
+        }
+        else if (hasLeftGround)
+        {
+            landTimer += Time.deltaTime;
+        }
+        // Handle drag so movement feels snappy (disabled while wall running)
+        if (wallRunScript != null && wallRunScript.isWallRunning)
+        {
             rb.linearDamping = 0f;
+        }
+        else if (isGrounded)
+        {
+            rb.linearDamping = groundDrag;
+        }
+        else
+        {
+            rb.linearDamping = 0f;
+        }
 
-        // Jump input
-        if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
+        // Jump input: Requires GetKeyDown, cooldown met, grounded, has left ground, and no wall running
+        if (Input.GetKeyDown(KeyCode.Space) && landTimer >= jumpCooldown && isGrounded && hasLeftGround && (wallRunScript == null || !wallRunScript.isWallRunning))
         {
             Jump();
         }
@@ -46,44 +71,45 @@ public class basic_movement : MonoBehaviour
 
     void FixedUpdate()
     {
+        // IF WALL RUNNING, STOP NORMAL MOVEMENT ENTIRELY
+        if (wallRunScript != null && wallRunScript.isWallRunning)
+        {
+            return; 
+        }
+
         MovePlayer();
         SpeedControl();
-        isTouchingWall = false; // Reset wall contact flag each frame
+        isTouchingWall = false; 
     }
 
     void MovePlayer()
     {
-        // Get WASD inputs
         float x = Input.GetAxisRaw("Horizontal");
         float z = Input.GetAxisRaw("Vertical");
 
         Vector3 moveDir = (transform.forward * z + transform.right * x).normalized;
 
-        // If touching a wall, strip out any input pushing directly into it
         if (isTouchingWall)
         {
             float dot = Vector3.Dot(moveDir, wallNormal);
             if (dot < 0)
             {
-                moveDir -= wallNormal * dot; // Removes the component pushing into the wall
+                moveDir -= wallNormal * dot;
             }
         }
 
-        // Apply movement force
         if (isGrounded)
         {
             rb.AddForce(moveDir * moveSpeed * movementMultiplier, ForceMode.Force);
         }
         else
         {
-            // Slight air control
             rb.AddForce(moveDir * moveSpeed * movementMultiplier * 0.4f, ForceMode.Force);
         }
     }
 
     void SpeedControl()
     {
-        // Limit horizontal speed to prevent runaway acceleration against walls
         Vector3 flatVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
 
         if (flatVel.magnitude > moveSpeed)
@@ -95,9 +121,17 @@ public class basic_movement : MonoBehaviour
 
     private void OnCollisionStay(Collision collision)
     {
+        foreach (ContactPoint c in collision.contacts)
+        {
+            bool onGroundLayer = (groundMask.value & (1 << c.otherCollider.gameObject.layer)) != 0;
+            if (onGroundLayer && c.normal.y > 0.7f)
+            {
+                lastGroundContactTime = Time.time;
+                break;
+            }
+        }
         foreach (ContactPoint contact in collision.contacts)
         {
-            // Check if the contact normal is vertical (a wall)
             if (contact.normal.y > -0.3f && contact.normal.y < 0.3f)
             {
                 isTouchingWall = true;
@@ -109,7 +143,8 @@ public class basic_movement : MonoBehaviour
 
     void Jump()
     {
-        // Reset vertical velocity before jumping for consistent height
+        landTimer = 0f; 
+        hasLeftGround = false; // Reset lift-off flag until we actually leave the floor
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
         rb.AddForce(transform.up * jumpForce, ForceMode.Impulse);
     }
