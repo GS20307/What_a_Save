@@ -1,23 +1,26 @@
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
-public class wallrun : MonoBehaviour
+public class WallRun : MonoBehaviour
 {
     [Header("References")]
     private Rigidbody rb;
-    private camera camScript; // References your custom camera script
+    private camera camScript;
 
-    [Header("Wall Running")]
+    [Header("Layer Masks")]
     public LayerMask whatIsWall;
     public LayerMask whatIsGround;
-    public float wallRunSpeed = 10f;
-    public float wallJumpForce = 7f;
-    public float wallCheckDistance = 0.8f;
-    public float minJumpHeight = 1.5f;
 
-    [Header("Camera Tilt")]
+    [Header("Wall Running & Launch Settings")]
+    public float wallRunSpeed = 12f;
+    public float wallJumpUpForce = 9f;     // Vertical launch power
+    public float wallJumpOutForce = 12f;   // How hard it kicks you toward the opposite wall
+    public float wallCheckDistance = 0.9f;
+    public float minJumpHeight = 1.0f;
+
+    [Header("Camera Tilt Settings")]
     public float camTilt = 15f;      
-    public float tiltSpeed = 10f;    
+    public float tiltSpeed = 15f;    
     private float currentTilt = 0f;
 
     private bool wallLeft;
@@ -62,7 +65,8 @@ public class wallrun : MonoBehaviour
     {
         float verticalInput = Input.GetAxisRaw("Vertical");
 
-        if ((wallLeft || wallRight) && verticalInput > 0 && AboveGround())
+        // Start Wall Run: Touching wall + holding W + airborne
+        if ((wallLeft || wallRight) && verticalInput > 0f && AboveGround())
         {
             if (!isWallRunning)
                 StartWallRun();
@@ -76,6 +80,12 @@ public class wallrun : MonoBehaviour
         {
             if (isWallRunning)
                 StopWallRun();
+            
+            // Allow launching/jumping off the wall even if W isn't held, as long as airborne
+            else if ((wallLeft || wallRight) && AboveGround() && Input.GetKeyDown(KeyCode.Space))
+            {
+                WallJump();
+            }
         }
     }
 
@@ -83,37 +93,50 @@ public class wallrun : MonoBehaviour
     {
         isWallRunning = true;
         rb.useGravity = false; 
+        rb.linearVelocity = new Vector3(rb.linearVelocity.x, Mathf.Max(rb.linearVelocity.y, 0f), rb.linearVelocity.z);
     }
 
     void WallRunningMovement()
     {
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
 
-        Vector3 wallNormal = wallRight ? rightWallHit.normal : leftWallHit.normal;
+        bool isRightWallActive = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
+        Vector3 wallNormal = isRightWallActive ? rightWallHit.normal : leftWallHit.normal;
+        
         Vector3 wallForward = Vector3.Cross(wallNormal, transform.up);
 
         if ((transform.forward - wallForward).magnitude > (transform.forward - -wallForward).magnitude)
+        {
             wallForward = -wallForward;
+        }
 
         rb.AddForce(wallForward * wallRunSpeed, ForceMode.Force);
 
         if (!(wallLeft && Input.GetKey(KeyCode.A)) && !(wallRight && Input.GetKey(KeyCode.D)))
-            rb.AddForce(-wallNormal * 100f, ForceMode.Force);
+        {
+            rb.AddForce(-wallNormal * 50f, ForceMode.Force);
+        }
     }
 
     void WallJump()
     {
-        Vector3 wallNormal = wallRight ? rightWallHit.normal : leftWallHit.normal;
-        Vector3 jumpDirection = transform.up + wallNormal * 1.5f;
+        // Determine which wall we are launching off of
+        bool isRightWallActive = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
+        Vector3 wallNormal = isRightWallActive ? rightWallHit.normal : leftWallHit.normal;
 
+        // Clear velocity for a clean, snappy launch
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
-        rb.AddForce(jumpDirection * wallJumpForce, ForceMode.Impulse);
+
+        // Launch up and away toward the opposite wall
+        Vector3 jumpDirection = (transform.up * wallJumpUpForce) + (wallNormal * wallJumpOutForce);
+        rb.AddForce(jumpDirection, ForceMode.Impulse);
 
         StopWallRun();
     }
 
     void StopWallRun()
     {
+        if (!isWallRunning) return;
         isWallRunning = false;
         rb.useGravity = true; 
     }
@@ -124,13 +147,22 @@ public class wallrun : MonoBehaviour
 
         if (isWallRunning)
         {
-            if (wallRight) targetTilt = camTilt;     
-            if (wallLeft) targetTilt = -camTilt;    
+            bool isRightWallActive = wallRight && (!wallLeft || rightWallHit.distance < leftWallHit.distance);
+            bool isLeftWallActive = wallLeft && (!wallRight || leftWallHit.distance < rightWallHit.distance);
+
+            // Correct tilt rules matching your preference
+            if (isRightWallActive) 
+            {
+                targetTilt = camTilt;  // Wall on the RIGHT -> Tilt RIGHT
+            }
+            else if (isLeftWallActive) 
+            {
+                targetTilt = -camTilt; // Wall on the LEFT -> Tilt LEFT
+            }
         }
 
         currentTilt = Mathf.Lerp(currentTilt, targetTilt, tiltSpeed * Time.deltaTime);
 
-        // Send the smooth tilt value directly to the camera script
         if (camScript != null)
         {
             camScript.currentTilt = currentTilt;
