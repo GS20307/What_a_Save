@@ -14,11 +14,18 @@ public class PauseMenu : MonoBehaviour
 
     void Start()
     {
+        if (StartMenu.IsOpen)
+        {
+            if (menuPanel != null) menuPanel.SetActive(false);
+                return;
+        }
         SetPaused(false);
     }
 
     void Update()
     {
+        if (StartMenu.IsOpen) return;   // Esc does nothing on the start screen
+
         if (Input.GetKeyDown(pauseKey))
             SetPaused(!isPaused);
     }
